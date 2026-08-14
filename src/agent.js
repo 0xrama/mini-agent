@@ -58,7 +58,6 @@ function resetTaskState(taskState) {
   taskState.contract = null;
   taskState.mutationVersion = 0;
   taskState.verifiedMutationVersion = -1;
-  taskState.verifications = [];
 }
 
 function completionGateIssue(taskState, verificationCommand) {

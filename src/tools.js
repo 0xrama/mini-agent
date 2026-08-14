@@ -39,13 +39,9 @@ function isWithin(root, path) {
   return rel === "" || (!rel.startsWith(`..${sep}`) && rel !== ".." && !isAbsolute(rel));
 }
 
-function canonicalExisting(path) {
-  return realpathSync(path);
-}
-
 function resolveReadablePath(inputPath, readRoots, base = readRoots[0]) {
   const candidate = resolve(base, inputPath);
-  const canonical = canonicalExisting(candidate);
+  const canonical = realpathSync(candidate);
   if (!readRoots.some((root) => isWithin(root, canonical))) {
     throw new Error(`path is outside permitted read roots: ${inputPath}`);
   }
@@ -54,7 +50,7 @@ function resolveReadablePath(inputPath, readRoots, base = readRoots[0]) {
 
 function resolveWritablePath(inputPath, workspaceRoot) {
   const candidate = resolve(workspaceRoot, inputPath);
-  const parent = canonicalExisting(dirname(candidate));
+  const parent = realpathSync(dirname(candidate));
   const canonical = resolve(parent, candidate.slice(dirname(candidate).length + 1));
   if (!isWithin(workspaceRoot, canonical)) {
     throw new Error(`path is outside the workspace: ${inputPath}`);
@@ -94,8 +90,8 @@ export function buildTools({
   verificationCommand = null,
   taskState = {},
 }) {
-  const root = canonicalExisting(workspaceRoot);
-  const readRoots = [root, ...skills.map((skill) => canonicalExisting(skill.dir))];
+  const root = realpathSync(workspaceRoot);
+  const readRoots = [root, ...skills.map((skill) => realpathSync(skill.dir))];
   const activeSkills = new Set();
   const readFiles = new Set();
 
@@ -301,7 +297,7 @@ export function buildTools({
           }
 
           if (!existsSync(path)) return result(`file does not exist: ${input.path}`, true);
-          const canonical = canonicalExisting(path);
+          const canonical = realpathSync(path);
           if (!isWithin(root, canonical)) {
             return result(`path resolves outside the workspace: ${input.path}`, true);
           }
@@ -340,12 +336,6 @@ export function buildTools({
         case "verify": {
           if (!verificationCommand) return result("No repository verification command is configured.", true);
           const output = await runShell(verificationCommand, 600_000);
-          taskState.verifications ??= [];
-          taskState.verifications.push({
-            command: verificationCommand,
-            passed: !output.isError,
-            mutationVersion: taskState.mutationVersion ?? 0,
-          });
           if (!output.isError) taskState.verifiedMutationVersion = taskState.mutationVersion ?? 0;
           return result(
             `${output.isError ? "Verification failed" : "Verification passed"}: ${verificationCommand}\n${output.content}`,
@@ -372,5 +362,5 @@ export function buildTools({
     }
   }
 
-  return { definitions, execute, activeSkills, workspaceRoot: root, taskState };
+  return { definitions, execute };
 }
