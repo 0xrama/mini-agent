@@ -32,7 +32,7 @@ export function skillSearchDirs(cwd = process.cwd()) {
  * (missing/unusable description, unparseable file). Everything else is a
  * warning: per the client guide, we warn but still load.
  */
-export function validateSkill(dirName, frontmatter) {
+function validateSkill(dirName, frontmatter) {
   const errors = [];
   const warnings = [];
   const { name, description, compatibility, metadata } = frontmatter;
