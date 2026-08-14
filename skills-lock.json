@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "goal-sloc": {
+      "source": "maxim-saplin/goal-sloc",
+      "sourceType": "github",
+      "skillPath": "skills/goal-sloc/SKILL.md",
+      "computedHash": "7e1adc45a756df334069168887a64f50d0e228d4277b1a4ae66f41cc9303f7e7"
+    }
+  }
+}

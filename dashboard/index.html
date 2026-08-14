@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily Dashboard</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-2: #1e2229;
+    --border: #2a2f3a;
+    --text: #e6e8eb;
+    --muted: #8b93a1;
+    --accent: #4f8cff;
+    --accent-2: #35c98d;
+    --danger: #ff5d6c;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  header h1 { margin: 0; font-size: 1.4rem; }
+  header .date { color: var(--muted); font-size: 0.95rem; }
+
+  nav {
+    display: flex;
+    gap: 8px;
+    padding: 12px 28px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    flex-wrap: wrap;
+  }
+  nav button {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 8px 16px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.15s ease;
+  }
+  nav button:hover { color: var(--text); border-color: var(--accent); }
+  nav button.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+
+  main {
+    padding: 24px 28px 60px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  .tab { display: none; }
+  .tab.active { display: block; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+  }
+  .card h3 { margin: 0 0 6px; font-size: 0.85rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  .card .value { font-size: 1.8rem; font-weight: 700; }
+  .card .sub { color: var(--muted); font-size: 0.85rem; margin-top: 4px; }
+
+  section.panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  section.panel h2 { margin-top: 0; font-size: 1.1rem; }
+
+  form.inline-form {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  form.inline-form input,
+  form.inline-form select,
+  form.inline-form textarea {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 9px 12px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+  }
+  form.inline-form input:focus,
+  form.inline-form select:focus,
+  form.inline-form textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  textarea { resize: vertical; min-height: 40px; width: 100%; font-family: inherit; }
+
+  button.btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 9px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+  button.btn:hover { opacity: 0.9; }
+  button.btn.secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  button.btn.danger { background: var(--danger); }
+
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+  th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  tr:last-child td { border-bottom: none; }
+  td.actions { text-align: right; white-space: nowrap; }
+  td.actions button { margin-left: 6px; }
+
+  ul.log-list { list-style: none; padding: 0; margin: 0; }
+  ul.log-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  ul.log-list li:last-child { border-bottom: none; }
+  ul.log-list .meta { color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
+  ul.log-list .del { flex-shrink: 0; }
+
+  .habit-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .habit-row:last-child { border-bottom: none; }
+  .habit-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent-2); }
+  .habit-row .name.done { text-decoration: line-through; color: var(--muted); }
+
+  .empty { color: var(--muted); font-style: italic; padding: 10px 0; }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.72rem; background: var(--panel-2); border: 1px solid var(--border); color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>📋 Daily Dashboard</h1>
+    <div class="date" id="today-date"></div>
+  </div>
+  <button class="btn danger" id="reset-btn" title="Clear all saved data">Reset All Data</button>
+</header>
+
+<nav>
+  <button data-tab="overview" class="active">Overview</button>
+  <button data-tab="gym">Gym Log</button>
+  <button data-tab="journal">Daily Journal</button>
+  <button data-tab="habits">Habits</button>
+</nav>
+
+<main>
+
+  <!-- OVERVIEW -->
+  <div class="tab active" id="tab-overview">
+    <div class="grid">
+      <div class="card">
+        <h3>Workouts logged</h3>
+        <div class="value" id="stat-workouts">0</div>
+        <div class="sub">all time</div>
+      </div>
+      <div class="card">
+        <h3>Journal entries</h3>
+        <div class="value" id="stat-journal">0</div>
+        <div class="sub">all time</div>
+      </div>
+      <div class="card">
+        <h3>Habits today</h3>
+        <div class="value" id="stat-habits">0/0</div>
+        <div class="sub">completed</div>
+      </div>
+      <div class="card">
+        <h3>Last workout</h3>
+        <div class="value" id="stat-last-workout" style="font-size:1.1rem;">—</div>
+        <div class="sub">most recent session</div>
+      </div>
+    </div>
+
+    <section class="panel">
+      <h2>Recent Activity</h2>
+      <ul class="log-list" id="recent-activity"></ul>
+    </section>
+  </div>
+
+  <!-- GYM LOG -->
+  <div class="tab" id="tab-gym">
+    <section class="panel">
+      <h2>Log a Workout</h2>
+      <form class="inline-form" id="gym-form">
+        <input type="date" id="gym-date" required>
+        <input type="text" id="gym-exercise" placeholder="Exercise (e.g. Bench Press)" required>
+        <input type="number" id="gym-sets" placeholder="Sets" min="0" style="width:80px;">
+        <input type="number" id="gym-reps" placeholder="Reps" min="0" style="width:80px;">
+        <input type="number" id="gym-weight" placeholder="Weight" min="0" style="width:90px;">
+        <select id="gym-unit">
+          <option value="kg">kg</option>
+          <option value="lb">lb</option>
+        </select>
+        <input type="text" id="gym-notes" placeholder="Notes (optional)" style="flex:1; min-width:160px;">
+        <button type="submit" class="btn">Add</button>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>History</h2>
+      <table>
+        <thead>
+          <tr><th>Date</th><th>Exercise</th><th>Sets</th><th>Reps</th><th>Weight</th><th>Notes</th><th></th></tr>
+        </thead>
+        <tbody id="gym-table-body"></tbody>
+      </table>
+      <div class="empty" id="gym-empty" style="display:none;">No workouts logged yet. Add your first one above.</div>
+    </section>
+  </div>
+
+  <!-- DAILY JOURNAL -->
+  <div class="tab" id="tab-journal">
+    <section class="panel">
+      <h2>New Entry</h2>
+      <form class="inline-form" id="journal-form" style="flex-direction:column; align-items:stretch;">
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <input type="date" id="journal-date" required>
+          <select id="journal-mood">
+            <option value="😄">😄 Great</option>
+            <option value="🙂">🙂 Good</option>
+            <option value="😐">😐 Okay</option>
+            <option value="😞">😞 Rough</option>
+          </select>
+        </div>
+        <textarea id="journal-text" placeholder="How did today go? What did you accomplish?" required></textarea>
+        <div><button type="submit" class="btn">Save Entry</button></div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Entries</h2>
+      <ul class="log-list" id="journal-list"></ul>
+      <div class="empty" id="journal-empty" style="display:none;">No journal entries yet.</div>
+    </section>
+  </div>
+
+  <!-- HABITS -->
+  <div class="tab" id="tab-habits">
+    <section class="panel">
+      <h2>Add a Habit</h2>
+      <form class="inline-form" id="habit-form">
+        <input type="text" id="habit-name" placeholder="e.g. Drink 2L water" required style="flex:1;">
+        <button type="submit" class="btn">Add Habit</button>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Today's Habits</h2>
+      <div id="habit-list"></div>
+      <div class="empty" id="habit-empty" style="display:none;">No habits yet. Add one above to start tracking.</div>
+    </section>
+  </div>
+
+</main>
+
+<script>
+(function () {
+  const STORAGE_KEY = "daily-dashboard-data-v1";
+
+  function loadData() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (e) { console.warn("Failed to parse stored data", e); }
+    return { workouts: [], journal: [], habits: [] };
+  }
+
+  let data = loadData();
+
+  function save() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    render();
+  }
+
+  function uid() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+
+  function todayISO() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function formatDate(iso) {
+    const d = new Date(iso + "T00:00:00");
+    if (isNaN(d)) return iso;
+    return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str ?? "";
+    return div.innerHTML;
+  }
+
+  // ---------- Tabs ----------
+  const navButtons = document.querySelectorAll("nav button");
+  navButtons.forEach(btn => {
+    btn.addEventListener("click", () => {
+      navButtons.forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+      document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+    });
+  });
+
+  // ---------- Header date ----------
+  document.getElementById("today-date").textContent = new Date().toLocaleDateString(undefined, {
+    weekday: "long", year: "numeric", month: "long", day: "numeric"
+  });
+
+  // ---------- Gym Log ----------
+  const gymForm = document.getElementById("gym-form");
+  document.getElementById("gym-date").value = todayISO();
+
+  gymForm.addEventListener("submit", e => {
+    e.preventDefault();
+    data.workouts.push({
+      id: uid(),
+      date: document.getElementById("gym-date").value || todayISO(),
+      exercise: document.getElementById("gym-exercise").value.trim(),
+      sets: document.getElementById("gym-sets").value,
+      reps: document.getElementById("gym-reps").value,
+      weight: document.getElementById("gym-weight").value,
+      unit: document.getElementById("gym-unit").value,
+      notes: document.getElementById("gym-notes").value.trim(),
+    });
+    gymForm.reset();
+    document.getElementById("gym-date").value = todayISO();
+    save();
+  });
+
+  function deleteWorkout(id) {
+    data.workouts = data.workouts.filter(w => w.id !== id);
+    save();
+  }
+
+  function renderGym() {
+    const body = document.getElementById("gym-table-body");
+    const empty = document.getElementById("gym-empty");
+    const sorted = [...data.workouts].sort((a, b) => b.date.localeCompare(a.date));
+    body.innerHTML = "";
+    empty.style.display = sorted.length ? "none" : "block";
+    sorted.forEach(w => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${formatDate(w.date)}</td>
+        <td>${escapeHtml(w.exercise)}</td>
+        <td>${escapeHtml(w.sets || "—")}</td>
+        <td>${escapeHtml(w.reps || "—")}</td>
+        <td>${w.weight ? escapeHtml(w.weight) + " " + escapeHtml(w.unit) : "—"}</td>
+        <td>${escapeHtml(w.notes || "—")}</td>
+        <td class="actions"><button class="btn secondary" data-del="${w.id}">Delete</button></td>
+      `;
+      body.appendChild(tr);
+    });
+    body.querySelectorAll("[data-del]").forEach(btn => {
+      btn.addEventListener("click", () => deleteWorkout(btn.dataset.del));
+    });
+  }
+
+  // ---------- Journal ----------
+  const journalForm = document.getElementById("journal-form");
+  document.getElementById("journal-date").value = todayISO();
+
+  journalForm.addEventListener("submit", e => {
+    e.preventDefault();
+    data.journal.push({
+      id: uid(),
+      date: document.getElementById("journal-date").value || todayISO(),
+      mood: document.getElementById("journal-mood").value,
+      text: document.getElementById("journal-text").value.trim(),
+    });
+    journalForm.reset();
+    document.getElementById("journal-date").value = todayISO();
+    save();
+  });
+
+  function deleteJournal(id) {
+    data.journal = data.journal.filter(j => j.id !== id);
+    save();
+  }
+
+  function renderJournal() {
+    const list = document.getElementById("journal-list");
+    const empty = document.getElementById("journal-empty");
+    const sorted = [...data.journal].sort((a, b) => b.date.localeCompare(a.date));
+    list.innerHTML = "";
+    empty.style.display = sorted.length ? "none" : "block";
+    sorted.forEach(j => {
+      const li = document.createElement("li");
+      li.innerHTML = `
+        <div>
+          <div>${j.mood} ${escapeHtml(j.text)}</div>
+          <div class="meta">${formatDate(j.date)}</div>
+        </div>
+        <button class="btn secondary del" data-del="${j.id}">Delete</button>
+      `;
+      list.appendChild(li);
+    });
+    list.querySelectorAll("[data-del]").forEach(btn => {
+      btn.addEventListener("click", () => deleteJournal(btn.dataset.del));
+    });
+  }
+
+  // ---------- Habits ----------
+  const habitForm = document.getElementById("habit-form");
+  habitForm.addEventListener("submit", e => {
+    e.preventDefault();
+    const nameInput = document.getElementById("habit-name");
+    const name = nameInput.value.trim();
+    if (!name) return;
+    data.habits.push({ id: uid(), name, doneDates: [] });
+    habitForm.reset();
+    save();
+  });
+
+  function toggleHabit(id) {
+    const habit = data.habits.find(h => h.id === id);
+    if (!habit) return;
+    const t = todayISO();
+    const idx = habit.doneDates.indexOf(t);
+    if (idx >= 0) habit.doneDates.splice(idx, 1);
+    else habit.doneDates.push(t);
+    save();
+  }
+
+  function deleteHabit(id) {
+    data.habits = data.habits.filter(h => h.id !== id);
+    save();
+  }
+
+  function renderHabits() {
+    const list = document.getElementById("habit-list");
+    const empty = document.getElementById("habit-empty");
+    empty.style.display = data.habits.length ? "none" : "block";
+    list.innerHTML = "";
+    const t = todayISO();
+    data.habits.forEach(h => {
+      const done = h.doneDates.includes(t);
+      const row = document.createElement("div");
+      row.className = "habit-row";
+      row.innerHTML = `
+        <input type="checkbox" ${done ? "checked" : ""} data-toggle="${h.id}">
+        <span class="name ${done ? "done" : ""}" style="flex:1;">${escapeHtml(h.name)}</span>
+        <span class="pill">${h.doneDates.length} day${h.doneDates.length === 1 ? "" : "s"} total</span>
+        <button class="btn secondary" data-del="${h.id}">Remove</button>
+      `;
+      list.appendChild(row);
+    });
+    list.querySelectorAll("[data-toggle]").forEach(cb => {
+      cb.addEventListener("change", () => toggleHabit(cb.dataset.toggle));
+    });
+    list.querySelectorAll("[data-del]").forEach(btn => {
+      btn.addEventListener("click", () => deleteHabit(btn.dataset.del));
+    });
+  }
+
+  // ---------- Overview ----------
+  function renderOverview() {
+    document.getElementById("stat-workouts").textContent = data.workouts.length;
+    document.getElementById("stat-journal").textContent = data.journal.length;
+
+    const t = todayISO();
+    const doneToday = data.habits.filter(h => h.doneDates.includes(t)).length;
+    document.getElementById("stat-habits").textContent = `${doneToday}/${data.habits.length}`;
+
+    const lastWorkout = [...data.workouts].sort((a, b) => b.date.localeCompare(a.date))[0];
+    document.getElementById("stat-last-workout").textContent = lastWorkout
+      ? `${lastWorkout.exercise} — ${formatDate(lastWorkout.date)}`
+      : "—";
+
+    const events = [
+      ...data.workouts.map(w => ({ date: w.date, text: `🏋️ ${w.exercise}`, type: "Gym" })),
+      ...data.journal.map(j => ({ date: j.date, text: `${j.mood} ${j.text.slice(0, 60)}${j.text.length > 60 ? "…" : ""}`, type: "Journal" })),
+    ].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8);
+
+    const recent = document.getElementById("recent-activity");
+    recent.innerHTML = "";
+    if (!events.length) {
+      recent.innerHTML = `<li class="empty">Nothing logged yet — add a workout or journal entry to see it here.</li>`;
+    } else {
+      events.forEach(ev => {
+        const li = document.createElement("li");
+        li.innerHTML = `
+          <div>
+            <div>${escapeHtml(ev.text)}</div>
+            <div class="meta">${formatDate(ev.date)}</div>
+          </div>
+          <span class="pill">${ev.type}</span>
+        `;
+        recent.appendChild(li);
+      });
+    }
+  }
+
+  // ---------- Reset ----------
+  document.getElementById("reset-btn").addEventListener("click", () => {
+    if (confirm("This will permanently delete all logged data. Continue?")) {
+      data = { workouts: [], journal: [], habits: [] };
+      save();
+    }
+  });
+
+  function render() {
+    renderGym();
+    renderJournal();
+    renderHabits();
+    renderOverview();
+  }
+
+  render();
+})();
+</script>
+
+</body>
+</html>
