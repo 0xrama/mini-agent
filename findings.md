@@ -1,214 +1,104 @@
 # Findings: mini-agent
 
-## Executive summary
+## What I built
 
-`mini-agent` satisfies the core technical shape of the take-home assignment: it is a
-Node.js CLI powered by Claude Sonnet, discovers three local Agent Skills, exposes only
-their metadata initially, lets Claude select a relevant skill, and loads the complete
-`SKILL.md` only after selection.
+I built `mini-agent` as a small Node.js coding-agent CLI around Anthropic's Messages API and the Agent Skills specification. I spent about five hours on the implementation and verification.
 
-The agent runs well in practice. Its deterministic suite passes 18 of 18 tests, its
-clean initialization path succeeds, and a live Claude smoke test completed a scoped
-file-editing task through the full contract -> edit -> verification -> completion loop.
-The two assignment-critical live prompts also behaved correctly at the selection
-level: the onboarding prompt loaded `welcome-me`, while the unrelated weather prompt
-did not.
+I wanted the project to stay small enough to understand end to end, while still being safe to run inside an existing repository. The core agent can inspect files, search, edit, run commands, load relevant skills, and verify its work. I focused most of my extra effort on the agent harness and on preventing unsafe or unverifiable edits.
 
-The implementation goes beyond the minimum assignment without replacing its central
-idea. Skill matching remains model-driven and easy to inspect; the additional harness
-features make edits safer, completion evidence-based, sessions recoverable, and failures
-diagnosable.
+The Agent Skills flow uses progressive disclosure:
 
-## Assignment fit
+1. I discover each skill's `name` and `description` from its frontmatter.
+2. I give Claude only that metadata initially.
+3. Claude decides whether a skill matches the user's request.
+4. Claude calls `load_skill` to receive the full `SKILL.md` only when the skill is relevant.
+5. Skill resources remain available for on-demand reads instead of being loaded eagerly.
 
-### Required behavior implemented
+This lets the agent use skills without putting every skill's full instructions into every conversation.
 
-- The program is a Node.js command-line application using the Anthropic SDK.
-- Claude Sonnet is configurable through `MINI_AGENT_MODEL` and defaults to
-  `claude-sonnet-5`.
-- Three bundled skills are present:
-  - `welcome-me`
-  - `changelog-generator`
-  - `file-organizer`
-- `changelog-generator` and `file-organizer` are existing registry/community skills.
-- Skills use the required directory layout: `.skills/<skill-name>/SKILL.md`.
-- `SKILL.md` YAML frontmatter is parsed and validated.
-- Only skill `name` and `description` are placed in the initial model context.
-- Claude decides whether a catalog entry matches the user's request.
-- A dedicated `load_skill` tool loads the full instructions after selection.
-- The tool's `name` argument is enum-constrained to discovered skills, preventing
-  hallucinated skill names.
-- When no skills exist, neither an empty catalog nor an unusable `load_skill` tool is
-  registered.
-- Skill activations are deduplicated during a session.
-- Users can also activate a skill explicitly with `/skill-name`.
-- Referenced `scripts/`, `references/`, and `assets/` remain available for on-demand
-  reads instead of being eagerly inserted into context.
+## How the implementation meets the assignment
 
-This follows the official Agent Skills model of progressive disclosure:
+I implemented the following assignment behaviors:
 
-1. Metadata at discovery time.
-2. Full instructions at activation time.
-3. Bundled resources only when needed.
+- A Node.js 18+ CLI using the Anthropic SDK.
+- A configurable model through `MINI_AGENT_MODEL`, defaulting to `claude-sonnet-5`.
+- Three bundled skills: `welcome-me`, `changelog-generator`, and `file-organizer`.
+- Discovery of `.skills/<skill-name>/SKILL.md` files with YAML frontmatter parsing.
+- Metadata-only disclosure before activation.
+- Model-driven skill selection instead of a hardcoded keyword matcher.
+- An enum-constrained `load_skill.name` argument so Claude can only request discovered skills.
+- Activation deduplication within a session.
+- Explicit skill activation through `/skill-name` in the REPL.
+- On-demand access to `scripts/`, `references/`, and `assets/` directories.
+- Skill-directory precedence, so workspace and user skills can shadow bundled skills.
+- Omission of `load_skill` when no valid skills are available.
 
-References:
+I kept the required welcome text inside `welcome-me/SKILL.md` rather than hardcoding it in the CLI. When Claude selects that skill, it receives the instruction and follows it. That makes the activation behavior observable and keeps the host implementation generic.
 
-- [Agent Skills specification](https://agentskills.io/specification)
-- [Agent Skills client implementation guide](https://agentskills.io/client-implementation/adding-skills-support)
+The relevant references I used were the [Agent Skills specification](https://agentskills.io/specification) and the [client implementation guide](https://agentskills.io/client-implementation/adding-skills-support).
 
-## The welcome-header contradiction
+## The main design challenge: progressive disclosure
 
-There are two conflicting observable requirements.
+The most important design decision for me was not to load every skill into the system prompt. It would have been simpler to concatenate all of the `SKILL.md` files, but that would defeat the point of the skills model and make unrelated requests carry unnecessary context.
 
-The supplied `welcome-me` skill states:
+I also decided not to implement host-side keyword matching. The host exposes a small catalog and lets Claude make the semantic relevance decision. The `load_skill` tool is the boundary that controls when the full instructions enter the conversation.
 
-```text
-## HARD REQUIREMENTS:
-Your response must include at the top:
-> Welcome to our Command Code assignment agent!
-```
+There are three useful consequences:
 
-The assignment's illustrative flow says the agent should print:
+- A relevant request can receive detailed instructions.
+- An unrelated request does not automatically activate a skill.
+- A hallucinated skill name cannot be loaded because the tool schema is limited to discovered names.
 
-```text
-> Welcome to our agent!
-```
-
-These cannot both be the exclusive first line. The skill instruction is more specific
-and the exercise is explicitly testing whether the agent loads and follows skill content.
-The assignment also warns the candidate to consider all requirements rather than only
-the example flow. For those reasons, preserving the skill-required first line is a
-reasonable interpretation of the intended gotcha.
-
-The safest compatibility output for the final submission is a two-line header:
-
-```text
-> Welcome to our Command Code assignment agent!
-> Welcome to our agent!
-```
-
-This keeps the skill-mandated line at the top while also including the exact example
-line. Importantly, these strings should remain in `SKILL.md`; they should not be
-hardcoded into the matching engine. That keeps the behavior skill-driven and proves
-that activation actually delivered the instructions to Claude.
-
-### Current live behavior
-
-For the prompt:
-
-```text
-I'm new to this project, what should I do?
-```
-
-the CLI logged:
-
-```text
-skill loaded: welcome-me
-```
-
-and placed the skill-required line at the top of its response:
+The bundled `welcome-me` skill has a hard requirement for this header:
 
 ```text
 > Welcome to our Command Code assignment agent!
 ```
 
-For the unrelated prompt:
+I left that requirement in the skill file and did not add special-case output logic for it. The model should follow the selected skill, not a hidden rule in the application.
 
-```text
-what's the weather?
-```
+## The agent harness
 
-the CLI answered without loading `welcome-me`. This is the most important negative
-matching behavior in the exercise: making a skill available does not mean polluting
-every request with its complete content.
+I added a task contract before edits. Before the first mutation, Claude must record an objective, concrete acceptance criteria, and any exclusions with `set_task_contract`.
 
-Before submission, the two-line compatibility output should be adopted or the ambiguity
-should be confirmed with Command Code. A strict test that requires both different
-strings to be the sole first line would be logically impossible.
+I also made completion evidence-based. Every successful `apply_patch` increments a mutation version. If the repository has a verifier, the agent cannot report completion until `verify` has passed after the latest mutation. This is enforced by the host loop rather than relying only on the system prompt.
 
-## Harness-engineering improvements
+The agent also:
 
-The project was reviewed against the [Learn Harness Engineering](https://walkinglabs.github.io/learn-harness-engineering/en/)
-material. Five high-value improvements were implemented.
+- Reads `AGENTS.md` or `CLAUDE.md` before working.
+- Detects `npm run check` or `npm test` as the repository-owned verification command.
+- Rolls back failed turns instead of persisting partial conversation state.
+- Persists successful sessions atomically and within a size limit.
+- Writes structured JSONL events for runs, model turns, tool calls, contracts, verification, and failures.
+- Enforces model-turn, tool-call, duration, and output limits.
 
-### 1. Repository as the system of record
+I added these controls because a coding agent should not be considered successful merely because it says that a change is complete. It should leave behind a contract and verification evidence.
 
-At startup, the agent discovers and loads repository instructions from `AGENTS.md` or
-`CLAUDE.md`. It also inspects `package.json` and selects the strongest conventional
-verification script: `npm run check` when present, otherwise `npm test`.
+## Safety decisions
 
-The repository now includes a compact `AGENTS.md` containing:
+I kept routine file operations behind narrow tools instead of making Bash the only interface. The tools:
 
-- Project purpose.
-- A code map.
-- Install, test, verification, and run commands.
-- Security and compatibility invariants.
-- An executable definition of done.
+- Return bounded, line-numbered file reads.
+- Search only within the workspace.
+- Require an existing file to be read before replacement or deletion.
+- Require replacement text to match exactly once.
+- Reject workspace escapes and symlink escapes.
+- Require confirmation for known destructive shell commands in the interactive REPL.
+- Reject those commands in one-shot mode when confirmation is unavailable.
 
-This gives a fresh agent session enough information to understand, operate, and verify
-the project without relying on facts held outside the repository.
+Bash is still available for tests, builds, git inspection, and commands that do not fit the dedicated tools. I instruct the model to use `apply_patch` for file changes so mutations remain visible to the host and to the trace.
 
-### 2. Explicit task contracts
+I also treat repository instructions and skill text as untrusted guidance. They can describe project conventions, but they cannot override the user's request, workspace boundaries, or host safety rules.
 
-Before `apply_patch` is permitted to edit a file, Claude must call
-`set_task_contract` with:
+## Testing and verification
 
-- An objective.
-- One or more concrete acceptance criteria.
-- Optional out-of-scope items.
-
-This makes the intended result visible before implementation begins and prevents
-unscoped edits. Contract creation is enforced by the tool host, not only requested in
-the system prompt.
-
-### 3. Evidence-gated completion
-
-Each successful `apply_patch` operation advances a mutation version. The repository-
-owned `verify` tool records the mutation version it verified. If Claude attempts to end
-an editing task before the latest mutation has passed verification, the host rejects
-completion and sends it back to continue working.
-
-This replaces subjective statements such as "the code looks correct" with executable
-evidence. The model cannot silently replace the repository verifier with an easier
-command.
-
-### 4. Durable session continuity
-
-Successful conversations are atomically checkpointed to
-`.mini-agent/session.json` and resumed on the next CLI run. Stored history is capped at
-200,000 characters and retained at complete user-turn boundaries. Failed turns roll
-back in memory and are not checkpointed.
-
-`/clear` resets the in-memory conversation and removes the persisted checkpoint.
-`--no-persist` provides an explicitly ephemeral run, while `--session <path>` supports
-named checkpoints.
-
-### 5. Structured observability
-
-The CLI writes JSONL task events to `.mini-agent/task-trace.jsonl`. Events include:
-
-- Run start, completion, and failure.
-- Model-turn start and completion.
-- Tool start, duration, result, and error status.
-- The task contract and acceptance criteria.
-- Completion-gate rejections.
-- Verification command, mutation version, and pass/fail result.
-
-Trace failures are isolated from agent execution so a diagnostics problem cannot break
-the task it is observing. Runtime files are git-ignored and created with mode `0600`
-where supported.
-
-## How well the coding agent runs
-
-### Deterministic verification
-
-The final clean verification command was:
+I ran the final local check with:
 
 ```sh
 npm run check
 ```
 
-Result:
+The result was:
 
 ```text
 18 tests
@@ -216,148 +106,49 @@ Result:
 0 failed
 ```
 
-The suite covers:
+The tests cover the agent loop, failed-turn rollback, budgets, session persistence, repository instruction discovery, skill precedence and validation, ranged reads, read-before-write behavior, ambiguous replacements, workspace and symlink escapes, destructive-command denial, completion evidence, and JSONL tracing.
 
-- Failed-turn history rollback.
-- Model-turn and tool-call budget enforcement.
-- Anthropic-compatible tool error reporting.
-- Completion rejection before post-edit verification.
-- Successful contract -> edit -> verify -> completion flow.
-- Atomic session persistence and resumption.
-- Repository instruction and verification-command discovery.
-- Bounded session history.
-- Skill-scope precedence and malformed-skill handling.
-- Ranged, line-numbered file reads.
-- Read-before-write enforcement.
-- Ambiguous replacement rejection.
-- Workspace and symlink escape rejection.
-- Destructive-command denial.
-- Omission of `load_skill` when no skills exist.
-- Task-contract enforcement.
-- Verification evidence tracking.
-- Machine-readable JSONL traces.
+I also ran `./init.sh`, which performs a clean `npm ci` followed by the same verification command.
 
-### Clean-start verification
+Separately, I ran three live Claude smoke tests because the deterministic suite intentionally never uses an API key:
 
-The one-command initialization path also passed:
+| Prompt | Result |
+| --- | --- |
+| `I'm new to this project, what should I do?` | `welcome-me` loaded and its required header appeared. |
+| `what's the weather?` | `welcome-me` was not loaded; the agent answered directly. |
+| `Create result.txt containing exactly harness-ok followed by a newline. Do not modify any other file.` | The agent recorded a contract, made the edit, passed repository verification, and completed. |
+
+I consider these smoke tests useful evidence of the live integration, but I do not treat them as a replacement for the offline suite.
+
+## Tradeoffs and limitations
+
+I made a few deliberate tradeoffs:
+
+- Skill selection is semantic and model-driven, so it can vary across wording and model versions.
+- The permanent tests use fake clients so they remain fast, deterministic, and free of network dependencies.
+- Bash is an escape hatch. I restrict known destructive patterns and direct the model not to edit through Bash, but I cannot prove that every arbitrary shell command is mutation-free.
+- Persisted sessions can contain prompts and file excerpts. They are local, git-ignored, and permission-restricted, but I would use `--no-persist` for sensitive work.
+- I added more reliability infrastructure than the minimum assignment required. I kept the implementation compact and documented the skill lifecycle first so the extra harness does not obscure the main exercise.
+
+## Reviewer walkthrough
+
+From the checkout, I would verify the project with:
 
 ```sh
-./init.sh
+npm install
+npm run check
 ```
 
-It performed a clean `npm ci`, reported zero dependency vulnerabilities, ran syntax
-checks over the source tree, executed all 18 tests, and printed the CLI start command.
-On the test machine, the complete command took approximately 1.2 seconds; exact timing
-will vary by machine and package cache.
+With an API key configured, these prompts exercise the important paths:
 
-### Live Claude editing test
-
-A disposable workspace was created with its own `AGENTS.md`, `package.json`, and a
-verifier that required `result.txt` to contain exactly `harness-ok\n`. The real CLI was
-then asked:
-
-```text
-Create result.txt containing exactly harness-ok followed by a newline.
-Do not modify any other file.
+```sh
+node src/cli.js "I'm new to this project, what should I do?"
+node src/cli.js "what's the weather?"
+node src/cli.js "Create a changelog from this week's commits"
 ```
 
-The live agent:
+The first prompt should activate `welcome-me`. The second should not. The third exercises the same catalog → selection → activation flow with another skill.
 
-1. Recorded a task contract.
-2. Created only the requested file through `apply_patch`.
-3. Called the repository-owned verifier.
-4. Received a successful verification result.
-5. Reported completion.
+## What I would improve next
 
-The trace recorded:
-
-```text
-model turns: 4
-tool calls: 3
-mutations: 1
-verification passed: true
-duration: approximately 10.6 seconds
-```
-
-The disposable workspace was removed after verification.
-
-### Live skill-selection tests
-
-Two real Claude runs exercised the assignment's most important selection boundary:
-
-| Prompt | Result | Approximate duration |
-| --- | --- | ---: |
-| `I'm new to this project, what should I do?` | Loaded `welcome-me` and followed its required first-line instruction | 9.6 s |
-| `what's the weather?` | Did not load `welcome-me`; answered directly | 3.1 s |
-
-These live results show that the matching design works as intended: Claude sees a small
-catalog, makes a semantic relevance decision, and pays the context cost of full skill
-instructions only for the matching request.
-
-## Engineering strengths
-
-- The skill-matching mechanism is semantic and model-driven rather than a hardcoded
-  onboarding keyword test.
-- The core loop is small enough to read end-to-end.
-- Independent read-only tool calls run concurrently.
-- File and search output is bounded to protect the model context.
-- Existing files must be read before replacement or deletion.
-- Replacements must match exactly once, preventing stale or ambiguous edits.
-- All paths are resolved against an immutable workspace root and checked after symlink
-  resolution.
-- Potentially destructive shell commands require interactive approval and are rejected
-  in one-shot mode.
-- Model turns, tool calls, task duration, and output tokens are bounded.
-- Tool failures are returned to Claude as structured error results so it can recover.
-- Skill content is treated as untrusted task guidance and cannot override host safety or
-  the user's intent.
-- Tests use fake Claude clients and temporary workspaces, so the main suite is fast,
-  deterministic, and does not spend API credits.
-
-## Honest limitations
-
-- Semantic skill selection is ultimately an LLM decision and therefore not perfectly
-  deterministic across every possible wording or future model version.
-- The completion gate version-tracks `apply_patch` operations. Bash is instructed not
-  to edit files, but arbitrary shell mutation is not comprehensively classified by the
-  host.
-- A live run still depends on API availability, credentials, latency, and model access.
-- Persisted conversations can contain user prompts and file excerpts. They are local,
-  permission-restricted, and git-ignored, but users handling sensitive material may
-  prefer `--no-persist`.
-- The permanent automated suite uses fake API clients. The real-model checks described
-  above were manual smoke tests because network-dependent tests would make the interview
-  suite slower and flaky.
-- The extra harness features exceed the assignment's minimum. They are valuable only as
-  long as the submission continues to foreground the simple Agent Skills lifecycle.
-
-## Submission recommendations
-
-Before sending the project:
-
-1. Resolve the welcome-header ambiguity with the two-line compatibility output or ask
-   Command Code for clarification.
-2. Add deterministic tests specifically proving positive `welcome-me` activation,
-   full instruction injection, exact header output, and negative unrelated-prompt
-   behavior.
-3. Make the example environment default to the official Anthropic API and
-   `claude-sonnet-5`; document Requesty as an optional gateway rather than the default.
-4. Replace the README's time-spent placeholder with the real amount of time spent.
-5. Lead the README with skill discovery, progressive disclosure, activation, and the
-   two evaluator prompts. Present the reliability harness as a secondary enhancement.
-6. Remove unrelated demo artifacts such as `dashboard/` from the final submission.
-7. Add source attribution for the two registry skills.
-8. Add and commit the intended project files before packaging or sharing the repository.
-
-## Overall assessment
-
-The coding agent is technically strong and demonstrably functional. Its central Agent
-Skills implementation aligns with the official progressive-disclosure workflow, its
-positive and negative selection behavior works with the real model, and its editing
-loop produces verifiable outcomes rather than optimistic completion claims.
-
-The remaining work is primarily submission polish: resolve or document the conflicting
-welcome headers, focus the narrative on the assignment's core, add direct tests around
-skill activation, and remove unrelated files. With those adjustments, the project
-should present a clear combination of requirement comprehension, clean implementation,
-thoughtful AI usage, and practical harness engineering.
+If I had more time, I would add deterministic tests around the exact positive and negative skill-selection flows without making the test suite depend on a live model. I would also add a small attribution note for the bundled community skills and a dedicated integration-test mode that can be run manually when credentials are available.

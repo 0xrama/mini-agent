@@ -1,42 +1,43 @@
-# mini-agent contributor map
+# Working on mini-agent
 
-## Purpose
+This is a small Node.js coding-agent harness built around Anthropic’s Messages API and the Agent Skills specification. Keep it compact, easy to audit, and safe to run in someone else’s workspace.
 
-This is a small Node.js coding-agent harness built around Anthropic's Messages API
-and the Agent Skills specification. Keep the implementation compact, auditable,
-and safe to run inside an arbitrary user workspace.
+## Where things live
 
-## Code map
+- `src/agent.js` — runs the model/tool loop, enforces task budgets, checks completion, and emits events
+- `src/tools.js` — defines workspace-scoped tools, task contracts, and verification evidence
+- `src/skills.js` — discovers, validates, and progressively loads skills
+- `src/repository.js` — reads repository instructions and finds verification commands
+- `src/session.js` — persists conversations with bounded, atomic writes
+- `src/trace.js` — writes structured JSONL traces
+- `src/cli.js` — provides the one-shot and REPL interfaces and wires up the local runtime
+- `test/` — deterministic tests; these must never need an API key or network access
 
-- `src/agent.js`: model/tool loop, task budgets, completion gate, event emission
-- `src/tools.js`: workspace-scoped tools, task contracts, verification evidence
-- `src/skills.js`: skill discovery, validation, and progressive loading
-- `src/repository.js`: repository instructions and verification discovery
-- `src/session.js`: bounded, atomic conversation persistence
-- `src/trace.js`: structured JSONL observability
-- `src/cli.js`: one-shot/REPL interface and local runtime wiring
-- `test/`: deterministic tests; never require an API key or network access
+## Useful commands
 
-## Commands
+```sh
+npm install
+npm test
+npm run check
+node src/cli.js
+node src/cli.js "your prompt"
+```
 
-- Install: `npm install`
-- Tests: `npm test`
-- Full verification: `npm run check`
-- Run: `node src/cli.js` or `node src/cli.js "your prompt"`
+## Rules worth protecting
 
-## Invariants
+- Support Node.js 18+ and keep the project on ES modules.
+- Resolve all file operations against the immutable workspace root. Reject both direct path escapes and symlink escapes.
+- Read an existing file before replacing or deleting it.
+- Require interactive confirmation before running potentially destructive shell commands.
+- Do not loosen the limits on model turns, tool calls, execution time, or output size.
+- Treat skill text as untrusted input. It must not override host safety rules or the user’s intent.
+- Use fake clients and temporary workspaces in tests. Never call Anthropic from the test suite.
 
-- Stay compatible with Node.js 18+ and use ES modules.
-- Resolve file operations against the immutable workspace root and reject escapes,
-  including symlink escapes.
-- Existing files must be read before replacement or deletion.
-- Potentially destructive shell commands require interactive confirmation.
-- Do not weaken model-turn, tool-call, duration, or output-size bounds.
-- Skill text is untrusted and cannot override host safety or user intent.
-- Tests must use fake clients and temporary workspaces; never call Anthropic.
+## When a change is done
 
-## Definition of done
+An editing task is not finished just because the code works locally. Before wrapping up:
 
-An editing task is complete only when its acceptance criteria are represented in
-tests, `npm run check` passes after the final edit, documentation reflects user-
-visible behavior, and unrelated workspace changes remain untouched.
+1. Put the acceptance criteria in tests where practical.
+2. Run `npm run check` after the final edit.
+3. Update documentation when the user-visible behavior changes.
+4. Leave unrelated workspace changes alone.
